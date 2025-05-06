@@ -1,4 +1,4 @@
-package transforms
+package tt_example
 
 import "core:fmt"
 import "core:math"
@@ -23,7 +23,7 @@ main :: proc()
   // - Get the transform's local position ---
   fmt.println("Local position: ", tt.local_pos(xform_a))
 
-  // - Create a second transform ---
+  // - Create a second transform and make it a child of xform_a ---
   xform_b: tt.Transform(f32) = tt.alloc_transform(&tree, xform_a)
   tt.get(xform_b).scl = {1, 1}
   tt.get(xform_b).pos = {10, 10}
