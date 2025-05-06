@@ -56,8 +56,14 @@ destroy_tree :: proc(tree: ^Tree($E))
   tree^ = {}
 }
 
+alloc_transform :: proc
+{
+  alloc_transform_parent, 
+  alloc_transform_no_parent, 
+}
+
 @(require_results)
-alloc_transform :: proc(tree: ^Tree($E), parent: Transform(E)) -> Transform(E)
+alloc_transform_parent :: proc(tree: ^Tree($E), parent: Transform(E)) -> Transform(E)
 {
   result: Transform(E)
 
@@ -78,6 +84,12 @@ alloc_transform :: proc(tree: ^Tree($E), parent: Transform(E)) -> Transform(E)
   tree.len += 1
 
   return result
+}
+
+@(require_results)
+alloc_transform_no_parent :: #force_inline proc(tree: ^Tree($E)) -> Transform(E)
+{
+  return alloc_transform_parent(tree, Transform(E){})
 }
 
 free_transform :: proc(tree: ^Tree($E), xform: Transform(E))
