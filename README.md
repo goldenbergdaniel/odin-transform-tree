@@ -39,3 +39,11 @@ main :: proc()
   fmt.println("B's rotation:", tt.global_rot(xform_b))
 }
 ```
+
+## TODO
+- [x] Core functionality
+- [ ] Use freelist instead of linear search when allocating transforms
+- [ ] Cache global value fetches
+
+## Not Planned
+- 3D support (If I get around to this, it'll be in its own package)
