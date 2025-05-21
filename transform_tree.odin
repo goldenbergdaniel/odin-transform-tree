@@ -20,8 +20,6 @@ Transform_Data :: struct($E: typeid)
 Tree :: struct($E: typeid)
 {
   data: [dynamic]Transform_Data(E),
-  len:  int,
-  cap:  int,
 }
 
 Tree_Union :: union
@@ -54,14 +52,13 @@ alloc_transform :: proc
   alloc_transform_parent, 
   alloc_transform_no_parent, 
 }
-import "core:fmt"
+
 @(require_results)
 alloc_transform_parent :: proc(tree: ^Tree($E), parent: Transform(E)) -> Transform(E)
 {
   result: Transform(E)
 
   found_free: bool
-
   for &slot, idx in tree.data
   {
     idx := u32(idx)
@@ -80,17 +77,12 @@ alloc_transform_parent :: proc(tree: ^Tree($E), parent: Transform(E)) -> Transfo
   if !found_free
   {
     transform := Transform(E){u32(len(tree.data))}
-    fmt.println(transform.id)
-
     append(&tree.data, Transform_Data(E){
       id = transform,
       parent_id = parent,
     })
-
     result = transform
   }
-
-  tree.len += 1
 
   return result
 }
