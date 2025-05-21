@@ -17,7 +17,7 @@ Entity :: struct
 
 main :: proc()
 {
-  tree: tt.Tree(f32) = tt.create_tree(f32, 100, context.allocator)
+  tree: tt.Tree(f32) = tt.create_tree(f32, 2, context.allocator)
   defer tt.destroy_tree(&tree)
   tt.global_tree = &tree
 

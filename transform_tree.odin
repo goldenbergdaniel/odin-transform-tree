@@ -19,7 +19,7 @@ Transform_Data :: struct($E: typeid)
 
 Tree :: struct($E: typeid)
 {
-  data: []Transform_Data(E),
+  data: [dynamic]Transform_Data(E),
   len:  int,
   cap:  int,
 }
@@ -35,11 +35,11 @@ Tree_Union :: union
 global_tree: Tree_Union
 
 @(require_results)
-create_tree :: proc($E: typeid, cap: int, allocator := context.allocator) -> Tree(E) 
+create_tree :: proc($E: typeid, reserve: int, allocator := context.allocator) -> Tree(E) 
   where intrinsics.type_is_float(E)
 {
   result: Tree(E)
-  result.data = make([]Transform_Data(E), cap, allocator)
+  result.data = make([dynamic]Transform_Data(E), reserve+1, allocator)
   return result
 }
 
@@ -54,11 +54,13 @@ alloc_transform :: proc
   alloc_transform_parent, 
   alloc_transform_no_parent, 
 }
-
+import "core:fmt"
 @(require_results)
 alloc_transform_parent :: proc(tree: ^Tree($E), parent: Transform(E)) -> Transform(E)
 {
   result: Transform(E)
+
+  found_free: bool
 
   for &slot, idx in tree.data
   {
@@ -70,8 +72,22 @@ alloc_transform_parent :: proc(tree: ^Tree($E), parent: Transform(E)) -> Transfo
       slot.id = Transform(E){idx}
       slot.parent_id = parent
       result = slot.id
+      found_free = true
       break
     }
+  }
+
+  if !found_free
+  {
+    transform := Transform(E){u32(len(tree.data))}
+    fmt.println(transform.id)
+
+    append(&tree.data, Transform_Data(E){
+      id = transform,
+      parent_id = parent,
+    })
+
+    result = transform
   }
 
   tree.len += 1
@@ -87,7 +103,7 @@ alloc_transform_no_parent :: #force_inline proc(tree: ^Tree($E)) -> Transform(E)
 
 free_transform :: proc(tree: ^Tree($E), xform: Transform(E))
 {
-  tree.data[xform] = {}
+  tree.data[xform.id] = {}
 }
 
 set_parent :: proc(parent: Transform($E), tree := global_tree)
