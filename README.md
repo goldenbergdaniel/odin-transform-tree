@@ -1,5 +1,5 @@
 # Transform Tree
-A simple 2D transform component tree for Odin.
+A simple 2D transform tree library for Odin. Best used in games requiring parent-child relationships between entities. 
 
 ```odin
 package main
