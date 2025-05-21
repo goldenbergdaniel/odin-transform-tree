@@ -2,12 +2,12 @@
 A simple 2D transform component tree for Odin.
 
 ```odin
-package tt_example
+package main
 
 import "core:fmt"
 import "core:math"
 
-import tt "../"
+import tt "transform_tree"
 
 main :: proc()
 {
