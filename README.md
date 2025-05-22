@@ -36,12 +36,16 @@ main :: proc()
   fmt.println("B's global position:", tt.global_pos(xform_b))
   fmt.println("B's global scale:", tt.global_scl(xform_b))
   fmt.println("B's global rotation:", tt.global_rot(xform_b))
+
+  // - Free the transforms ---
+  tt.free_transform(&tree, xform_a)
+  tt.free_transform(&tree, xform_b)
 }
 ```
 
 ## TODO
 - [x] Core functionality
-- [ ] Use freelist instead of linear search when allocating transforms
+- [X] Use freelist instead of linear search when allocating transforms
 - [ ] Cache global value fetches
 
 ## Not Planned

@@ -10,16 +10,18 @@ Transform :: struct($E: typeid)
 
 Transform_Data :: struct($E: typeid)
 {
-  id:        Transform(E),
-  parent_id: Transform(E),
-  pos:       [2]E,
-  scl:       [2]E,
-  rot:       E,
+  ref:        Transform(E),
+  parent_ref: Transform(E),
+  prev_free:  ^Transform_Data(E),
+  pos:        [2]E,
+  scl:        [2]E,
+  rot:        E,
 }
 
 Tree :: struct($E: typeid)
 {
-  data: [dynamic]Transform_Data(E),
+  data:       [dynamic]Transform_Data(E),
+  last_free: ^Transform_Data(E),
 }
 
 Tree_Union :: union
@@ -33,12 +35,25 @@ Tree_Union :: union
 global_tree: Tree_Union
 
 @(require_results)
-create_tree :: proc($E: typeid, reserve: int, allocator := context.allocator) -> Tree(E) 
+create_tree :: proc($E: typeid, n: int, allocator := context.allocator) -> Tree(E) 
   where intrinsics.type_is_float(E)
 {
   result: Tree(E)
-  result.data = make([dynamic]Transform_Data(E), reserve+1, allocator)
+  result.data = make([dynamic]Transform_Data(E), 1, n+1, allocator)
   return result
+}
+
+clear_tree :: proc(tree: ^Tree($E))
+{
+  for &xform in tree.data
+  {
+    xform = {}
+  }
+  
+  clear(&tree.data)
+  append(&tree.data, Transform_Data(E){})
+
+  tree.last_free = nil
 }
 
 destroy_tree :: proc(tree: ^Tree($E))
@@ -58,30 +73,20 @@ alloc_transform_parent :: proc(tree: ^Tree($E), parent: Transform(E)) -> Transfo
 {
   result: Transform(E)
 
-  found_free: bool
-  for &slot, idx in tree.data
+  if tree.last_free != nil
   {
-    idx := u32(idx)
-    if idx == 0 do continue
-
-    if slot == {}
-    {
-      slot.id = Transform(E){idx}
-      slot.parent_id = parent
-      result = slot.id
-      found_free = true
-      break
-    }
+    result = tree.last_free.ref
+    tree.data[result.id].ref = result
+    tree.data[result.id].parent_ref = parent
+    tree.last_free = tree.last_free.prev_free
   }
-
-  if !found_free
+  else
   {
-    transform := Transform(E){u32(len(tree.data))}
-    append(&tree.data, Transform_Data(E){
-      id = transform,
-      parent_id = parent,
-    })
-    result = transform
+    append(&tree.data, Transform_Data(E){})
+    idx := len(tree.data) - 1
+    result = Transform(E){u32(idx)}
+    tree.data[idx].ref = result
+    tree.data[idx].parent_ref = parent
   }
 
   return result
@@ -95,7 +100,13 @@ alloc_transform_no_parent :: #force_inline proc(tree: ^Tree($E)) -> Transform(E)
 
 free_transform :: proc(tree: ^Tree($E), xform: Transform(E))
 {
-  tree.data[xform.id] = {}
+  tree.data[xform.id].prev_free = tree.last_free
+  tree.last_free = &tree.data[xform.id]
+  
+  tree.data[xform.id] = {
+    ref = tree.data[xform.id].ref,
+    prev_free = tree.data[xform.id].prev_free,
+  }
 }
 
 set_parent :: proc(parent: Transform($E), tree := global_tree)
@@ -162,10 +173,10 @@ global_pos :: proc(xform: Transform($E), tree := global_tree) -> [2]E
   result: matrix[3,3]E = ident_3x3f(E(1))
 
   curr_xform := local(xform, tree.(^Tree(E)))
-  for curr_xform.id != {}
+  for curr_xform.ref != {}
   {
-    result = model_matrix(curr_xform.id, tree) * result
-    curr_xform = local(curr_xform.parent_id)
+    result = model_matrix(curr_xform.ref, tree) * result
+    curr_xform = local(curr_xform.parent_ref)
   }
 
   return {result[0,2], result[1,2]}
@@ -179,10 +190,10 @@ global_scl :: proc(xform: Transform($E), tree := global_tree) -> [2]E
   result: [2]E = {1, 1}
   
   curr_xform := local(xform, tree.(^Tree(E)))
-  for curr_xform.id != {}
+  for curr_xform.ref != {}
   {
     result *= curr_xform.scl
-    curr_xform = local(curr_xform.parent_id)
+    curr_xform = local(curr_xform.parent_ref)
   }
 
   return result
@@ -196,10 +207,10 @@ global_rot :: proc(xform: Transform($E), tree := global_tree) -> E
   result: E
   
   curr_xform := local(xform, tree.(^Tree(E)))
-  for curr_xform.id != {}
+  for curr_xform.ref != {}
   {
     result += curr_xform.rot
-    curr_xform = local(curr_xform.parent_id)
+    curr_xform = local(curr_xform.parent_ref)
   }
 
   return result
