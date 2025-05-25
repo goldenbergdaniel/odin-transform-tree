@@ -25,7 +25,7 @@ main :: proc()
   tt.local(xform_a).rotation = math.PI
 
   // - Alternative way to get the transform's local position ---
-  fmt.println("A's local position:", tt.local_position(xform_a))
+  _ = tt.local_position(xform_a)
 
   // - Alternative way to set the transform's local position ---
   tt.set_local_position(xform_a, [2]f32{100, 100})
