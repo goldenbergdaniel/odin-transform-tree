@@ -12,9 +12,6 @@ Transform :: struct
 
 Transform_Data :: struct
 {
-  ref:        Transform,
-  parent_ref: Transform,
-  prev_free:  ^Transform_Data,
   using _:    struct #raw_union
   {
     position: [2]float,
@@ -30,6 +27,9 @@ Transform_Data :: struct
     rotation: float,
     rot:      float,
   },
+  _prev_free:  ^Transform_Data,
+  _ref:        Transform,
+  _parent_ref: Transform,
 }
 
 Tree :: struct
@@ -81,18 +81,18 @@ alloc_transform_parent :: proc(tree: ^Tree, parent: Transform) -> Transform
 
   if tree.last_free != nil
   {
-    result = tree.last_free.ref
-    tree.data[result.id].ref = result
-    tree.data[result.id].parent_ref = parent
-    tree.last_free = tree.last_free.prev_free
+    result = tree.last_free._ref
+    tree.data[result.id]._ref = result
+    tree.data[result.id]._parent_ref = parent
+    tree.last_free = tree.last_free._prev_free
   }
   else
   {
     append(&tree.data, Transform_Data{})
     idx := len(tree.data) - 1
     result = Transform{u32(idx)}
-    tree.data[idx].ref = result
-    tree.data[idx].parent_ref = parent
+    tree.data[idx]._ref = result
+    tree.data[idx]._parent_ref = parent
   }
 
   return result
@@ -106,19 +106,19 @@ alloc_transform_no_parent :: #force_inline proc(tree: ^Tree) -> Transform
 
 free_transform :: proc(tree: ^Tree, xform: Transform)
 {
-  tree.data[xform.id].prev_free = tree.last_free
+  tree.data[xform.id]._prev_free = tree.last_free
   tree.last_free = &tree.data[xform.id]
   
   tree.data[xform.id] = {
-    ref = tree.data[xform.id].ref,
-    prev_free = tree.data[xform.id].prev_free,
+    _ref = tree.data[xform.id]._ref,
+    _prev_free = tree.data[xform.id]._prev_free,
   }
 }
 
 set_parent :: proc(child, parent: Transform, tree := global_tree)
 {
   if tree == nil do return
-  tree.data[child.id].parent_ref = tree.data[parent.id].ref
+  tree.data[child.id]._parent_ref = tree.data[parent.id]._ref
 }
 
 /*
@@ -191,10 +191,10 @@ global_position :: proc(xform: Transform, tree := global_tree) -> [2]float
   result: matrix[3,3]float = ident_3x3f(float(1))
 
   curr_xform := local(xform, tree)
-  for curr_xform.ref != {}
+  for curr_xform._ref != {}
   {
-    result = model_matrix(curr_xform.ref, tree) * result
-    curr_xform = local(curr_xform.parent_ref)
+    result = model_matrix(curr_xform._ref, tree) * result
+    curr_xform = local(curr_xform._parent_ref)
   }
 
   return {result[0,2], result[1,2]}
@@ -208,10 +208,10 @@ global_scale :: proc(xform: Transform, tree := global_tree) -> [2]float
   result: [2]float = {1, 1}
   
   curr_xform := local(xform, tree)
-  for curr_xform.ref != {}
+  for curr_xform._ref != {}
   {
     result *= curr_xform.scl
-    curr_xform = local(curr_xform.parent_ref)
+    curr_xform = local(curr_xform._parent_ref)
   }
 
   return result
@@ -225,10 +225,10 @@ global_rotation :: proc(xform: Transform, tree := global_tree) -> float
   result: float
   
   curr_xform := local(xform, tree)
-  for curr_xform.ref != {}
+  for curr_xform._ref != {}
   {
     result += curr_xform.rot
-    curr_xform = local(curr_xform.parent_ref)
+    curr_xform = local(curr_xform._parent_ref)
   }
 
   return result
