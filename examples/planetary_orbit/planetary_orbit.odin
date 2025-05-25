@@ -41,7 +41,7 @@ main :: proc()
 
   rl.SetTraceLogLevel(.ERROR)
   rl.SetTargetFPS(60)
-  rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "TransformTree")
+  rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Planetary Orbit Example")
 
   for !rl.WindowShouldClose()
   {
@@ -59,18 +59,11 @@ main :: proc()
     // - Draw ---
     rl.BeginDrawing()
     rl.ClearBackground(rl.BLACK)
-
-    draw_circle(tt.global_pos(sun), tt.global_scl(sun), sun.color)
-    draw_circle(tt.global_pos(earth), tt.global_scl(earth), earth.color)
-    draw_circle(tt.global_pos(moon), tt.global_scl(moon), moon.color)
-
+    rl.DrawCircleV(tt.global_pos(sun), tt.global_scl(sun).x * 50, sun.color)
+    rl.DrawCircleV(tt.global_pos(earth), tt.global_scl(earth).x * 50, earth.color)
+    rl.DrawCircleV(tt.global_pos(moon), tt.global_scl(moon).x * 50, moon.color)
     rl.EndDrawing()
   }
 
   rl.CloseWindow()
-}
-
-draw_circle :: proc(pos, dim: [2]f32, color: rl.Color)
-{
-  rl.DrawCircleV(pos, dim.x * 50, color)
 }
