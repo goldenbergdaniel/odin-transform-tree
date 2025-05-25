@@ -1,49 +1,55 @@
 package transform_tree
 
-import "base:intrinsics"
 import "core:math"
 
-Transform :: struct($E: typeid)
+// The float type to use. Default is `f32`
+float :: f32
+
+Transform :: struct
 {
   id: u32,
 }
 
-Transform_Data :: struct($E: typeid)
+Transform_Data :: struct
 {
-  ref:        Transform(E),
-  parent_ref: Transform(E),
-  prev_free:  ^Transform_Data(E),
-  pos:        [2]E,
-  scl:        [2]E,
-  rot:        E,
+  ref:        Transform,
+  parent_ref: Transform,
+  prev_free:  ^Transform_Data,
+  using _:    struct #raw_union
+  {
+    position: [2]float,
+    pos:      [2]float,
+  },
+  using _:    struct  #raw_union
+  {
+    scale:    [2]float,
+    scl:      [2]float,
+  },
+  using _:    struct #raw_union
+  {
+    rotation: float,
+    rot:      float,
+  },
 }
 
-Tree :: struct($E: typeid)
+Tree :: struct
 {
-  data:       [dynamic]Transform_Data(E),
-  last_free: ^Transform_Data(E),
-}
-
-Tree_Union :: union
-{
-  ^Tree(f16),
-  ^Tree(f32),
-  ^Tree(f64),
+  data:       [dynamic]Transform_Data,
+  last_free: ^Transform_Data,
 }
 
 @(thread_local)
-global_tree: Tree_Union
+global_tree: ^Tree
 
 @(require_results)
-create_tree :: proc($E: typeid, n: int, allocator := context.allocator) -> Tree(E) 
-  where intrinsics.type_is_float(E)
+create_tree :: proc(n: int, allocator := context.allocator) -> Tree 
 {
-  result: Tree(E)
-  result.data = make([dynamic]Transform_Data(E), 1, n+1, allocator)
+  result: Tree
+  result.data = make([dynamic]Transform_Data, 1, n+1, allocator)
   return result
 }
 
-clear_tree :: proc(tree: ^Tree($E))
+clear_tree :: proc(tree: ^Tree)
 {
   for &xform in tree.data
   {
@@ -51,12 +57,12 @@ clear_tree :: proc(tree: ^Tree($E))
   }
   
   clear(&tree.data)
-  append(&tree.data, Transform_Data(E){})
+  append(&tree.data, Transform_Data{})
 
   tree.last_free = nil
 }
 
-destroy_tree :: proc(tree: ^Tree($E))
+destroy_tree :: proc(tree: ^Tree)
 {
   delete(tree.data)
   tree^ = {}
@@ -69,9 +75,9 @@ alloc_transform :: proc
 }
 
 @(require_results)
-alloc_transform_parent :: proc(tree: ^Tree($E), parent: Transform(E)) -> Transform(E)
+alloc_transform_parent :: proc(tree: ^Tree, parent: Transform) -> Transform
 {
-  result: Transform(E)
+  result: Transform
 
   if tree.last_free != nil
   {
@@ -82,9 +88,9 @@ alloc_transform_parent :: proc(tree: ^Tree($E), parent: Transform(E)) -> Transfo
   }
   else
   {
-    append(&tree.data, Transform_Data(E){})
+    append(&tree.data, Transform_Data{})
     idx := len(tree.data) - 1
-    result = Transform(E){u32(idx)}
+    result = Transform{u32(idx)}
     tree.data[idx].ref = result
     tree.data[idx].parent_ref = parent
   }
@@ -93,12 +99,12 @@ alloc_transform_parent :: proc(tree: ^Tree($E), parent: Transform(E)) -> Transfo
 }
 
 @(require_results)
-alloc_transform_no_parent :: #force_inline proc(tree: ^Tree($E)) -> Transform(E)
+alloc_transform_no_parent :: #force_inline proc(tree: ^Tree) -> Transform
 {
-  return alloc_transform_parent(tree, Transform(E){})
+  return alloc_transform_parent(tree, Transform{})
 }
 
-free_transform :: proc(tree: ^Tree($E), xform: Transform(E))
+free_transform :: proc(tree: ^Tree, xform: Transform)
 {
   tree.data[xform.id].prev_free = tree.last_free
   tree.last_free = &tree.data[xform.id]
@@ -109,70 +115,82 @@ free_transform :: proc(tree: ^Tree($E), xform: Transform(E))
   }
 }
 
-set_parent :: proc(parent: Transform($E), tree := global_tree)
+set_parent :: proc(child, parent: Transform, tree := global_tree)
 {
   if tree == nil do return
-  tree.(^Tree(E)).data[child.id].parent_id = parent.id
+  tree.data[child.id].parent_ref = tree.data[parent.id].ref
 }
 
 /*
-Returns a pointer to the transform data. The fields `pos`, `scl`, and `rot` give the
-local values and are safe to mutate.
+  Returns a pointer to the transform data. The fields `pos`, `scl`, and `rot` give the
+  local values and are safe to mutate.
 */
 @(require_results)
-local :: proc(xform: Transform($E), tree := global_tree) -> ^Transform_Data(E)
+local :: proc(xform: Transform, tree := global_tree) -> ^Transform_Data
 {
   if tree == nil do return {}
-  return &tree.(^Tree(E)).data[xform.id]
+  return &tree.data[xform.id]
 }
 
+local_pos :: local_position
+local_scl :: local_scale
+local_rot :: local_rotation
+
 @(require_results)
-local_pos :: proc(xform: Transform($E), tree := global_tree) -> [2]E
+local_position :: proc(xform: Transform, tree := global_tree) -> [2]float
 {
   if tree == nil do return {0, 0}
-  return tree.(^Tree(E)).data[xform.id].pos
+  return tree.data[xform.id].pos
 }
 
 @(require_results)
-local_scl :: proc(xform: Transform($E), tree := global_tree) -> [2]E
+local_scale :: proc(xform: Transform, tree := global_tree) -> [2]float
 {
   if tree == nil do return {0, 0}
-  return tree.(^Tree(E)).data[xform.id].scl
+  return tree.data[xform.id].scl
 }
 
 @(require_results)
-local_rot :: proc(xform: Transform($E), tree := global_tree) -> E
+local_rotation :: proc(xform: Transform, tree := global_tree) -> float
 {
   if tree == nil do return 0
-  return tree.(^Tree(E)).data[xform.id].rot
+  return tree.data[xform.id].rot
 }
 
-set_local_pos :: proc(xform: Transform($E), pos: [2]f32, tree := global_tree)
+set_local_pos :: set_local_position
+set_local_scl :: set_local_scale
+set_local_rot :: set_local_rotation
+
+set_local_position :: proc(xform: Transform, pos: [2]f32, tree := global_tree)
 {
   if tree == nil do return
-  tree.(^Tree(E)).data[xform.id].pos = pos
+  tree.data[xform.id].pos = pos
 }
 
-set_local_scl :: proc(xform: Transform($E), scl: [2]f32, tree := global_tree)
+set_local_scale :: proc(xform: Transform, scl: [2]f32, tree := global_tree)
 {
   if tree == nil do return
-  tree.(^Tree(E)).data[xform.id].scl = scl
+  tree.data[xform.id].scl = scl
 }
 
-set_local_rot :: proc(xform: Transform($E), rot: f32, tree := global_tree)
+set_local_rotation :: proc(xform: Transform, rot: f32, tree := global_tree)
 {
   if tree == nil do return
-  tree.(^Tree(E)).data[xform.id].rot = rot
+  tree.data[xform.id].rot = rot
 }
+
+global_pos :: global_position
+global_scl :: global_scale
+global_rot :: global_rotation
 
 @(require_results)
-global_pos :: proc(xform: Transform($E), tree := global_tree) -> [2]E
+global_position :: proc(xform: Transform, tree := global_tree) -> [2]float
 {
   if tree == nil do return {0, 0}
 
-  result: matrix[3,3]E = ident_3x3f(E(1))
+  result: matrix[3,3]float = ident_3x3f(float(1))
 
-  curr_xform := local(xform, tree.(^Tree(E)))
+  curr_xform := local(xform, tree)
   for curr_xform.ref != {}
   {
     result = model_matrix(curr_xform.ref, tree) * result
@@ -183,13 +201,13 @@ global_pos :: proc(xform: Transform($E), tree := global_tree) -> [2]E
 }
 
 @(require_results)
-global_scl :: proc(xform: Transform($E), tree := global_tree) -> [2]E
+global_scale :: proc(xform: Transform, tree := global_tree) -> [2]float
 {
   if tree == nil do return {0, 0}
 
-  result: [2]E = {1, 1}
+  result: [2]float = {1, 1}
   
-  curr_xform := local(xform, tree.(^Tree(E)))
+  curr_xform := local(xform, tree)
   for curr_xform.ref != {}
   {
     result *= curr_xform.scl
@@ -200,13 +218,13 @@ global_scl :: proc(xform: Transform($E), tree := global_tree) -> [2]E
 }
 
 @(require_results)
-global_rot :: proc(xform: Transform($E), tree := global_tree) -> E
+global_rotation :: proc(xform: Transform, tree := global_tree) -> float
 {
   if tree == nil do return 0
   
-  result: E
+  result: float
   
-  curr_xform := local(xform, tree.(^Tree(E)))
+  curr_xform := local(xform, tree)
   for curr_xform.ref != {}
   {
     result += curr_xform.rot
@@ -216,7 +234,11 @@ global_rot :: proc(xform: Transform($E), tree := global_tree) -> E
   return result
 }
 
-set_global_pos :: proc(xform: Transform($E), pos: [2]E, tree := global_tree)
+set_global_pos :: set_global_position
+set_global_scl :: set_global_scale
+set_global_rot :: set_global_rotation
+
+set_global_position :: proc(xform: Transform, pos: [2]float, tree := global_tree)
 {
   if tree == nil do return
 
@@ -241,7 +263,7 @@ set_global_pos :: proc(xform: Transform($E), pos: [2]E, tree := global_tree)
   }
 }
 
-set_global_scl :: proc(xform: Transform($E), scl: [2]E, tree := global_tree)
+set_global_scale :: proc(xform: Transform, scl: [2]float, tree := global_tree)
 {
   curr_global_scl := global_scl(xform, tree)
   curr_local_scl := local(xform, tree).scl
@@ -250,7 +272,7 @@ set_global_scl :: proc(xform: Transform($E), scl: [2]E, tree := global_tree)
   local(xform, tree).scl.y *= curr_local_scl.y / curr_global_scl.y * scl.y
 }
 
-set_global_rot :: proc(xform: Transform($E), rot: E, tree := global_tree)
+set_global_rotation :: proc(xform: Transform, rot: float, tree := global_tree)
 {
   curr_global_rot := global_rot(xform, tree)
   if curr_global_rot < rot
@@ -264,12 +286,12 @@ set_global_rot :: proc(xform: Transform($E), rot: E, tree := global_tree)
 }
 
 @(require_results)
-model_matrix :: proc(xform: Transform($E), tree := global_tree) -> matrix[3,3]E
+model_matrix :: proc(xform: Transform, tree := global_tree) -> matrix[3,3]float
 {
   if tree == nil do return {}
 
-  xform := tree.(^Tree(E)).data[xform.id]
-  result := ident_3x3f(E(1.0))
+  xform := tree.data[xform.id]
+  result := ident_3x3f(float(1.0))
   result = scale_3x3f(xform.scl) * result
   result = rotation_3x3f(xform.rot) * result
   result = translation_3x3f(xform.pos) * result
@@ -279,7 +301,7 @@ model_matrix :: proc(xform: Transform($E), tree := global_tree) -> matrix[3,3]E
 // 2D Matrix ///////////////////////////////////////////////////////////////////////////
 
 @(require_results, private)
-ident_3x3f :: #force_inline proc(val: $E) -> matrix[3,3]E
+ident_3x3f :: #force_inline proc(val: $float) -> matrix[3,3]float
 {
   return {
     val, 0, 0,
@@ -289,36 +311,36 @@ ident_3x3f :: #force_inline proc(val: $E) -> matrix[3,3]E
 }
 
 @(require_results, private)
-translation_3x3f :: proc(v: [2]$E) -> matrix[3,3]E
+translation_3x3f :: proc(v: [2]$float) -> matrix[3,3]float
 {
-  result: matrix[3,3]E = ident_3x3f(E(1))
+  result: matrix[3,3]float = ident_3x3f(float(1))
   result[0,2] = v.x
   result[1,2] = v.y
   return result
 }
 
 @(require_results, private)
-scale_3x3f :: proc(v: [2]$E) -> matrix[3,3]E
+scale_3x3f :: proc(v: [2]$float) -> matrix[3,3]float
 {
-  result: matrix[3,3]E = ident_3x3f(E(1))
+  result: matrix[3,3]float = ident_3x3f(float(1))
   result[0,0] = v.x
   result[1,1] = v.y
   return result
 }
 
 @(require_results, private)
-shear_3x3f :: proc(v: [2]$E) -> matrix[3,3]E
+shear_3x3f :: proc(v: [2]$float) -> matrix[3,3]float
 {
-  result: matrix[3,3]E = ident_3x3f(E(1))
+  result: matrix[3,3]float = ident_3x3f(float(1))
   result[0,1] = v.x
   result[1,0] = v.y
   return result
 }
 
 @(require_results, private)
-rotation_3x3f :: proc(rads: $E) -> matrix[3,3]E
+rotation_3x3f :: proc(rads: $float) -> matrix[3,3]float
 {
-  result: matrix[3,3]E = ident_3x3f(E(1))
+  result: matrix[3,3]float = ident_3x3f(float(1))
   result[0,0] = math.cos(rads)
   result[0,1] = -math.sin(rads)
   result[1,0] = math.sin(rads)
