@@ -12,20 +12,20 @@ Transform :: struct
 
 Transform_Data :: struct
 {
-  using _:    struct #raw_union
+  using _:     struct #raw_union
   {
-    position: [2]float,
-    pos:      [2]float,
+    position:  [2]float,
+    pos:       [2]float,
   },
-  using _:    struct  #raw_union
+  using _:     struct  #raw_union
   {
-    scale:    [2]float,
-    scl:      [2]float,
+    scale:     [2]float,
+    scl:       [2]float,
   },
-  using _:    struct #raw_union
+  using _:     struct #raw_union
   {
-    rotation: float,
-    rot:      float,
+    rotation:  float,
+    rot:       float,
   },
   _prev_free:  ^Transform_Data,
   _ref:        Transform,
@@ -84,6 +84,7 @@ alloc_transform_parent :: proc(tree: ^Tree, parent: Transform) -> Transform
     result = tree.last_free._ref
     tree.data[result.id]._ref = result
     tree.data[result.id]._parent_ref = parent
+    tree.data[result.id].scale = {1, 1}
     tree.last_free = tree.last_free._prev_free
   }
   else
@@ -93,6 +94,7 @@ alloc_transform_parent :: proc(tree: ^Tree, parent: Transform) -> Transform
     result = Transform{u32(idx)}
     tree.data[idx]._ref = result
     tree.data[idx]._parent_ref = parent
+    tree.data[idx].scale = {1, 1}
   }
 
   return result
@@ -115,10 +117,15 @@ free_transform :: proc(tree: ^Tree, xform: Transform)
   }
 }
 
-set_parent :: proc(child, parent: Transform, tree := global_tree)
+set_parent :: #force_inline proc(child, parent: Transform, tree := global_tree)
 {
   if tree == nil do return
-  tree.data[child.id]._parent_ref = tree.data[parent.id]._ref
+  tree.data[child.id]._parent_ref = parent
+}
+
+attach_child :: #force_inline proc(parent, child: Transform, tree := global_tree)
+{
+  set_parent(child, parent, tree)
 }
 
 /*
@@ -291,8 +298,7 @@ model_matrix :: proc(xform: Transform, tree := global_tree) -> matrix[3,3]float
   if tree == nil do return {}
 
   xform := tree.data[xform.id]
-  result := ident_3x3f(float(1.0))
-  result = scale_3x3f(xform.scl) * result
+  result := scale_3x3f(xform.scl)
   result = rotation_3x3f(xform.rot) * result
   result = translation_3x3f(xform.pos) * result
   return result
@@ -301,7 +307,7 @@ model_matrix :: proc(xform: Transform, tree := global_tree) -> matrix[3,3]float
 // 2D Matrix ///////////////////////////////////////////////////////////////////////////
 
 @(require_results, private)
-ident_3x3f :: #force_inline proc(val: $float) -> matrix[3,3]float
+ident_3x3f :: #force_inline proc(val: float) -> matrix[3,3]float
 {
   return {
     val, 0, 0,
@@ -311,7 +317,7 @@ ident_3x3f :: #force_inline proc(val: $float) -> matrix[3,3]float
 }
 
 @(require_results, private)
-translation_3x3f :: proc(v: [2]$float) -> matrix[3,3]float
+translation_3x3f :: proc(v: [2]float) -> matrix[3,3]float
 {
   result: matrix[3,3]float = ident_3x3f(float(1))
   result[0,2] = v.x
@@ -329,7 +335,7 @@ scale_3x3f :: proc(v: [2]$float) -> matrix[3,3]float
 }
 
 @(require_results, private)
-shear_3x3f :: proc(v: [2]$float) -> matrix[3,3]float
+shear_3x3f :: proc(v: [2]float) -> matrix[3,3]float
 {
   result: matrix[3,3]float = ident_3x3f(float(1))
   result[0,1] = v.x
@@ -338,7 +344,7 @@ shear_3x3f :: proc(v: [2]$float) -> matrix[3,3]float
 }
 
 @(require_results, private)
-rotation_3x3f :: proc(rads: $float) -> matrix[3,3]float
+rotation_3x3f :: proc(rads: float) -> matrix[3,3]float
 {
   result: matrix[3,3]float = ident_3x3f(float(1))
   result[0,0] = math.cos(rads)
