@@ -32,24 +32,42 @@ Transform_Data :: struct
   _parent_ref: Transform,
 }
 
-Tree :: struct
+Transform_Tree :: struct
 {
-  data:       [dynamic]Transform_Data,
+  data:      [dynamic]Transform_Data,
   last_free: ^Transform_Data,
 }
 
 @(thread_local)
-global_tree: ^Tree
+global_tree: ^Transform_Tree
 
 @(require_results)
-create_tree :: proc(n: int, allocator := context.allocator) -> Tree 
+create_tree :: proc(n: int, allocator := context.allocator) -> Transform_Tree 
 {
-  result: Tree
+  result: Transform_Tree
   result.data = make([dynamic]Transform_Data, 1, n+1, allocator)
   return result
 }
 
-clear_tree :: proc(tree: ^Tree)
+copy_tree :: proc(dst, src: ^Transform_Tree)
+{
+  temp := dst.data
+  dst^ = src^
+  dst.data = temp
+  resize(&dst.data, len(src.data))
+  copy(dst.data[:], src.data[:])
+  shrink(&dst.data)
+
+  curr: ^^Transform_Data
+  for curr = &dst.last_free; curr^ != nil;
+  {
+    prev := &(curr^)._prev_free
+    curr^ = &dst.data[(curr^)._ref.id]
+    curr = prev
+  }
+}
+
+clear_tree :: proc(tree: ^Transform_Tree)
 {
   for &xform in tree.data
   {
@@ -62,7 +80,7 @@ clear_tree :: proc(tree: ^Tree)
   tree.last_free = nil
 }
 
-destroy_tree :: proc(tree: ^Tree)
+destroy_tree :: proc(tree: ^Transform_Tree)
 {
   delete(tree.data)
   tree^ = {}
@@ -75,7 +93,7 @@ alloc_transform :: proc
 }
 
 @(require_results)
-alloc_transform_parent :: proc(tree: ^Tree, parent: Transform) -> Transform
+alloc_transform_parent :: proc(tree: ^Transform_Tree, parent: Transform) -> Transform
 {
   result: Transform
 
@@ -101,12 +119,12 @@ alloc_transform_parent :: proc(tree: ^Tree, parent: Transform) -> Transform
 }
 
 @(require_results)
-alloc_transform_no_parent :: #force_inline proc(tree: ^Tree) -> Transform
+alloc_transform_no_parent :: #force_inline proc(tree: ^Transform_Tree) -> Transform
 {
   return alloc_transform_parent(tree, Transform{})
 }
 
-free_transform :: proc(tree: ^Tree, xform: Transform)
+free_transform :: proc(tree: ^Transform_Tree, xform: Transform)
 {
   tree.data[xform.id]._prev_free = tree.last_free
   tree.last_free = &tree.data[xform.id]
@@ -125,6 +143,7 @@ set_parent :: #force_inline proc(child, parent: Transform, tree := global_tree)
 
 attach_child :: #force_inline proc(parent, child: Transform, tree := global_tree)
 {
+  if tree == nil do return
   set_parent(child, parent, tree)
 }
 
@@ -201,7 +220,7 @@ global_position :: proc(xform: Transform, tree := global_tree) -> [2]float
   for curr_xform._ref != {}
   {
     result = model_matrix(curr_xform._ref, tree) * result
-    curr_xform = local(curr_xform._parent_ref)
+    curr_xform = local(curr_xform._parent_ref, tree)
   }
 
   return {result[0,2], result[1,2]}
@@ -218,7 +237,7 @@ global_scale :: proc(xform: Transform, tree := global_tree) -> [2]float
   for curr_xform._ref != {}
   {
     result *= curr_xform.scl
-    curr_xform = local(curr_xform._parent_ref)
+    curr_xform = local(curr_xform._parent_ref, tree)
   }
 
   return result
@@ -235,7 +254,7 @@ global_rotation :: proc(xform: Transform, tree := global_tree) -> float
   for curr_xform._ref != {}
   {
     result += curr_xform.rot
-    curr_xform = local(curr_xform._parent_ref)
+    curr_xform = local(curr_xform._parent_ref, tree)
   }
 
   return result
@@ -272,6 +291,8 @@ set_global_position :: proc(xform: Transform, pos: [2]float, tree := global_tree
 
 set_global_scale :: proc(xform: Transform, scl: [2]float, tree := global_tree)
 {
+  if tree == nil do return
+
   curr_global_scl := global_scl(xform, tree)
   curr_local_scl := local(xform, tree).scl
 
@@ -281,6 +302,8 @@ set_global_scale :: proc(xform: Transform, scl: [2]float, tree := global_tree)
 
 set_global_rotation :: proc(xform: Transform, rot: float, tree := global_tree)
 {
+  if tree == nil do return
+
   curr_global_rot := global_rot(xform, tree)
   if curr_global_rot < rot
   {
@@ -298,7 +321,8 @@ model_matrix :: proc(xform: Transform, tree := global_tree) -> matrix[3,3]float
   if tree == nil do return {}
 
   xform := tree.data[xform.id]
-  result := scale_3x3f(xform.scl)
+  result := ident_3x3f(1)
+  result = scale_3x3f(xform.scl) * result
   result = rotation_3x3f(xform.rot) * result
   result = translation_3x3f(xform.pos) * result
   return result
@@ -353,3 +377,4 @@ rotation_3x3f :: proc(rads: float) -> matrix[3,3]float
   result[1,1] = math.cos(rads)
   return result
 }
+
