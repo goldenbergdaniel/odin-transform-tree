@@ -12,7 +12,7 @@ import tt "transform_tree"
 main :: proc()
 {
     // - Create a transform tree with 100 reserved slots ---
-    tree: tt.Tree = tt.create_tree(100, context.allocator)
+    tree: tt.Transform_Tree = tt.create_tree(100, context.allocator)
     defer tt.destroy_tree(&tree)
   
     // - Set the global tree ---
